@@ -4,21 +4,17 @@ This incident documents the investigation of anomalous DNS activity indicative o
 
 Through packet capture and Zeek analysis, the traffic was validated as unicast DNS over UDP/53 and explicitly ruled out multicast name resolution (mDNS/LLMNR). The behavior was ultimately classified as DNS tunneling consistent with covert command-and-control or data exfiltration.
 
-This sets the tone: clear, confident, not sensational.
-
 # 2. Detection
 
 The investigation began after observing abnormal DNS query patterns during network traffic analysis. These patterns included unusually long subdomain labels, non-human-readable character distributions, and sustained query frequency from a single internal host.
 
 Initial hypotheses included:
 
-Legitimate but noisy name resolution
+- Legitimate but noisy name resolution
 
-Multicast DNS or LLMNR traffic
+- Multicast DNS or LLMNR traffic
 
-DNS tunneling or covert channel activity
-
-This shows analytical discipline — not jumping to conclusions.
+- DNS tunneling or covert channel activity
 
 # 3. Evidence Collection
 
@@ -26,11 +22,9 @@ Network traffic was captured on a dedicated Zeek sensor using tcpdump, with filt
 
 The following Zeek logs were generated and analyzed:
 
-conn.log — connection-level metadata
+- conn.log — connection-level metadata
 
-dns.log — DNS query and response details
-
-This is where you reference the setup without dumping commands.
+- dns.log — DNS query and response details
 
 # 4. Analysis & Validation
 ### 4.1 Transport Validation: DNS vs mDNS/LLMNR
@@ -39,9 +33,7 @@ Connection-level analysis confirmed that all suspicious traffic occurred over un
 
 Screenshot reference:
 
-Figure 1: conn.log showing unicast UDP/53 traffic and absence of multicast DNS ports.
-
-This is one of your strongest differentiators.
+- Figure 1: conn.log showing unicast UDP/53 traffic and absence of multicast DNS ports.
 
 ### 4.2 Query Structure and Entropy
 
@@ -49,9 +41,7 @@ Analysis of dns.log revealed DNS queries with near-maximum-length subdomain labe
 
 Screenshot reference:
 
-Figure 2: Long, high-entropy DNS queries extracted from dns.log.
-
-This is the flagship visual.
+- Figure 2: Long, high-entropy DNS queries extracted from dns.log.
 
 ### 4.3 Source Attribution and Frequency
 
@@ -59,17 +49,13 @@ Query frequency analysis showed that a single internal host (192.168.94.136) was
 
 Screenshot reference:
 
-Figure 3: DNS query volume by source host.
-
-This clearly scopes the incident.
+- Figure 3: DNS query volume by source host.
 
 # 5. Conclusion and Classification
 
 Based on transport validation, query structure, entropy, and frequency analysis, the activity was classified as DNS tunneling. The behavior is consistent with covert command-and-control communication or data exfiltration over DNS.
 
 The incident was scoped to a single internal host, with no evidence of lateral propagation during the observation window.
-
-Clear, decisive, but still evidence-driven.
 
 # 6. Recommended Response Actions
 
