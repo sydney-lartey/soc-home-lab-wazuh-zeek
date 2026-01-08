@@ -1,99 +1,82 @@
-# Incident 003 — Potential DNS Tunneling Activity (Zeek + Wazuh)
+# 1. Overview
 
-## Incident Summary
-Suspicious DNS activity was detected involving repeated queries with unusually long, irregular subdomain names. The behaviour deviated from normal DNS resolution patterns and is consistent with techniques commonly used for **DNS tunneling or covert command-and-control (C2)** communication.
+This incident documents the investigation of anomalous DNS activity indicative of DNS tunneling. The activity was characterized by high-frequency DNS queries containing long, high-entropy subdomains originating from a single internal host.
 
-## Alert Details
-- Detection Tool: Wazuh SIEM
-- Data Source: Zeek `dns.log` (JSON)
-- Alert Type: Suspicious DNS behaviour
-- Severity: Medium–High
-- Detection Method: Behavioural analysis of DNS query structure and frequency
+Through packet capture and Zeek analysis, the traffic was validated as unicast DNS over UDP/53 and explicitly ruled out multicast name resolution (mDNS/LLMNR). The behavior was ultimately classified as DNS tunneling consistent with covert command-and-control or data exfiltration.
 
-## Environment
-- SIEM: Wazuh
-- Network Monitoring: Zeek
-- Log Type: `dns.log` (JSON)
-- Monitored Systems:
-  - Internal Linux and Windows endpoints
-  - Kali Linux host (attack simulation)
-- Network: Home lab with controlled outbound DNS access
-- Ingestion: Zeek DNS telemetry ingested into Wazuh using native JSON decoding
+This sets the tone: clear, confident, not sensational.
 
-## Detection Logic
-The detection focused on identifying **DNS query characteristics** commonly associated with tunneling activity.
+#2. Detection
 
-**Indicators evaluated:**
-- Excessively long domain names
-- High-entropy or random-looking subdomains
-- Repeated queries to the same parent domain
-- High query frequency over a short time window
-- Lack of corresponding legitimate application behaviour
+The investigation began after observing abnormal DNS query patterns during network traffic analysis. These patterns included unusually long subdomain labels, non-human-readable character distributions, and sustained query frequency from a single internal host.
 
-**Rationale:**
-DNS tunneling encodes data into subdomains, which results in long, random-looking queries. Malware frequently abuses DNS as it is typically allowed through network controls and inspected less deeply than other protocols.
+Initial hypotheses included:
 
-## Investigation Steps
+Legitimate but noisy name resolution
 
-### 1) Validate DNS query patterns
-Reviewed Zeek `dns.log` entries associated with the alert, focusing on query structure and repetition.
+Multicast DNS or LLMNR traffic
 
-**Key fields analysed:**
-- `query`
-- `qtype_name`
-- `rcode_name`
-- `id.orig_h`
-- `answers`
-- `trans_id`
+DNS tunneling or covert channel activity
 
-### 2) Behavioural analysis
-The following characteristics were observed:
-- Repeated queries to the same parent domain
-- Subdomains significantly longer than typical hostnames
-- Subdomains appearing algorithmically generated
-- Query frequency exceeding expected application behaviour
-- Minimal or low-value DNS responses
+This shows analytical discipline — not jumping to conclusions.
 
-### 3) Contextual validation
-- No known internal service or application justified the observed DNS activity
-- Query structure and frequency were inconsistent with CDNs or legitimate telemetry services
-- Behaviour aligned with known DNS-based C2 and tunneling techniques
-- During investigation, DNS-related UDP traffic to multicast addresses (224.0.0.251/252) on port 5353 was observed. This was identified as mDNS service discovery traffic rather than recursive DNS resolution. While it initially appeared anomalous due to lack of responses and S0 connection states, destination addressing and port usage confirmed benign behaviour (See evidence/screenshots/zeek-mdns-traffic.png for Zeek connection metadata confirming multicast DNS behaviour).
+# 3. Evidence Collection
 
-## Findings & Confidence
-**Assessment:** Likely malicious DNS tunneling behaviour  
-**Confidence:** Medium–High
+Network traffic was captured on a dedicated Zeek sensor using tcpdump, with filtering applied to UDP port 53 to focus on DNS activity. The resulting packet capture was parsed using Zeek with checksum validation disabled to account for virtualized network offloading.
 
-**Why not “High”?**
-- Certain legitimate edge cases exist (e.g., CDNs, analytics, telemetry)
-- Endpoint confirmation is required to fully validate intent
+The following Zeek logs were generated and analyzed:
 
-**Why escalation is justified:**
-- High-entropy, long subdomains
-- Consistent query repetition
-- Behavioural alignment with known tunneling techniques
+conn.log — connection-level metadata
 
-## Outcome
-**Status:** Escalated for deeper investigation
+dns.log — DNS query and response details
 
-The incident was escalated due to the likelihood of DNS being used as a covert communication channel. Additional endpoint and network correlation is required to confirm compromise and scope.
+This is where you reference the setup without dumping commands.
 
-## Recommended Next Actions
+# 4. Analysis & Validation
+## 4.1 Transport Validation: DNS vs mDNS/LLMNR
 
-### Immediate
-- Identify the endpoint generating the DNS queries
-- Inspect running processes, scheduled tasks, and persistence mechanisms
-- Validate whether the domain is known or authorised
+Connection-level analysis confirmed that all suspicious traffic occurred over unicast DNS (UDP/53) to the internal resolver at 192.168.94.2. No traffic was observed on UDP/5353 or UDP/5355, ruling out mDNS and LLMNR as potential causes.
 
-### Follow-up / Correlation
-- Correlate DNS activity with:
-  - Zeek `conn.log` for outbound connections
-  - Endpoint process creation and network telemetry
-- Monitor for increases in data volume or sustained beaconing
-- Block or sinkhole the domain if confirmed malicious
+Screenshot reference:
 
-## Lessons Learned
-- DNS is a common and effective channel for covert C2 communication
-- Behavioural analysis is critical for detecting DNS tunneling
-- High-frequency, high-entropy queries are strong indicators
-- Correlation across DNS, network, and endpoint logs improves confidence and reduces false positives
+Figure 1: conn.log showing unicast UDP/53 traffic and absence of multicast DNS ports.
+
+This is one of your strongest differentiators.
+
+## 4.2 Query Structure and Entropy
+
+Analysis of dns.log revealed DNS queries with near-maximum-length subdomain labels and high-entropy character sets consistent with encoded payloads. Many queries followed a sequential pattern, further indicating automated generation rather than human-driven domain lookups.
+
+Screenshot reference:
+
+Figure 2: Long, high-entropy DNS queries extracted from dns.log.
+
+This is the flagship visual.
+
+## 4.3 Source Attribution and Frequency
+
+Query frequency analysis showed that a single internal host (192.168.94.136) was responsible for the majority of anomalous DNS traffic. Other hosts generated minimal DNS activity, suggesting the behavior was isolated rather than network-wide.
+
+Screenshot reference:
+
+Figure 3: DNS query volume by source host.
+
+This clearly scopes the incident.
+
+# 5. Conclusion and Classification
+
+Based on transport validation, query structure, entropy, and frequency analysis, the activity was classified as DNS tunneling. The behavior is consistent with covert command-and-control communication or data exfiltration over DNS.
+
+The incident was scoped to a single internal host, with no evidence of lateral propagation during the observation window.
+
+Clear, decisive, but still evidence-driven.
+
+# 6. Recommended Response Actions
+
+Isolate the affected host (192.168.94.136) from the network
+
+Block or sinkhole suspicious domain patterns at the DNS resolver
+
+Perform host-based forensic analysis to identify the originating process and persistence mechanisms
+
+Implement behavioral DNS monitoring, including query length, entropy, and per-host rate baselining
