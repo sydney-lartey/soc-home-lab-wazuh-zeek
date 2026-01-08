@@ -1,77 +1,134 @@
-Detection and Analysis of Port Scanning Activity.
+# Incident 002 — Detection of TCP Port Scanning with Service Probing
+### Overview
 
-1. Alert Summary
-  •	Alert Type: Suspicious network scanning activity
-  •	Severity: Medium–High
-  •	Detection Source: Wazuh SIEM
-  •	Data Source: Zeek conn.log
-  •	Detection Method: Behavioural analysis of repeated connection attempts
-  •	Observed Behaviour: Multiple connection attempts to different destination ports from a single source host
-Summary:
-An alert was generated after observing multiple outbound connection attempts from a single internal host to multiple destination ports within a short time window. This behaviour is consistent with network reconnaissance or port scanning activity.
+This incident documents the detection and analysis of TCP-based port scanning activity originating from an internal host. The behavior was identified through connection-level analysis and correlated with known scanning techniques involving SYN-based probing and service/version detection.
 
-2. Environment
-  •	SIEM Platform: Wazuh
-  •	Network Monitoring: Zeek
-  •	Log Type: conn.log (JSON format)
-  •	Monitored Hosts:
-    o	Kali Linux host (attack simulation)
-    o	Internal Linux and Windows endpoints
-  •	Network Type: Isolated home lab environment
-Zeek network telemetry was ingested into Wazuh using native JSON decoding, allowing direct field-based rule matching.
+The activity was classified as active reconnaissance, not exploitation, and was scoped to a single internal host.
 
-3. Detection Logic
-The detection focused on identifying multiple connection attempts originating from a single host to multiple destination ports.
-Indicators Used:
-  •	Repeated connections from the same source IP
-  •	Multiple destination ports within a short timeframe
-  •	Abnormal connection states or failed connections
-Rationale:
-  •	Port scanning is commonly used during reconnaissance to identify open services
-  •	Repeated failed or incomplete connections are a strong indicator of scanning behaviour
-  •	Early detection allows defenders to identify potential threats before exploitation
-   
-4. Investigation Steps
-   
-4.1 Log Review
-Zeek conn.log entries showed multiple connections sharing the same source IP but targeting different destination ports.
-Key fields reviewed:
-  •	id.orig_h (source IP)
-  •	id.resp_p (destination port)
-  •	conn_state
-  •	orig_pkts / resp_pkts
-  •	history
+## 1.0 Alert Summary
 
-4.2 Key Indicators Observed
-Indicator                	        Observation                          Significance
-Repeated source IP	    Single host initiating connections	    Indicates reconnaissance
-Multiple ports	            Sequential destination ports	      Typical scan pattern
-Low packet counts	          Minimal traffic per connection	      Scan probing
-Connection states	            Failed or partial connections    	No legitimate session established
+- Severity: Medium
 
-4.3 Behavioural Analysis
-  •	Legitimate applications typically communicate with specific ports, not a wide range
-  •	The observed pattern suggested automated probing rather than user activity
-  •	The behaviour matched known TCP/UDP scanning techniques used by tools such as Nmap
+- Detection Source: Network telemetry (Zeek)
 
-6. Assessment
-   
-Likelihood of Malicious Activity: Medium to High
-The activity strongly resembled reconnaissance behaviour. While benign causes (e.g., vulnerability scanning tools) are possible, such activity should be validated and monitored closely, especially if originating from an unexpected host.
+- Data Source: Zeek conn.log and protocol logs
 
-8. Recommended Actions
-   
-Immediate Actions
-  •	Identify the host responsible for the scanning activity
-  •	Validate whether the activity was authorized (e.g., internal testing)
-  •	Review host processes and command history
-Follow-Up Actions
-  •	Monitor for escalation attempts (exploitation, lateral movement)
-  •	Correlate with authentication logs and endpoint telemetry
-  •	Block or rate-limit suspicious scanning behaviour if unauthorized
+- Detection Type: TCP horizontal port scanning
 
-10. Lessons Learned
-  •	Zeek provides strong visibility into early-stage reconnaissance
-  •	Port scanning detection is a high-value SOC use case
-  •	Behavioural context is essential to distinguish malicious scans from authorized testing
-  •	Correlation across time significantly improves confidence
+- Source Host: 192.168.94.136 (Kali Linux)
+
+- Target Host: 192.168.94.138 (Linux)
+
+### Summary
+
+A single internal host initiated a large number of short-lived TCP connections to a wide range of destination ports on a single target system. The connection pattern was consistent with horizontal port scanning and prompted further investigation.
+
+## 2.0 Environment
+
+- Monitoring Platform: Zeek
+
+- Network Sensor: Zeek (Ubuntu)
+
+- Packet Capture: tcpdump
+
+- Attacker / Simulator: Kali Linux (192.168.94.136)
+
+- Target Host: Linux system (192.168.94.138)
+
+- Network Type: Internal lab network
+
+## 3.0 Detection Logic
+
+The activity was detected based on abnormal TCP connection patterns rather than application-layer service identification.
+
+Rule Conditions (Conceptual)
+
+- proto = tcp
+
+- Short-lived connections
+
+- Multiple destination ports
+
+- Single source host
+
+### Rationale
+
+Port scanning typically manifests as:
+
+- One-to-many connection attempts
+
+- Minimal data transfer
+
+- Rapid succession of TCP sessions
+
+Service labels are not required to identify scanning behavior.
+
+## 4.0 Investigation and Analysis
+### 4.1 Connection-Level Analysis
+
+Analysis of Zeek conn.log revealed:
+
+- A single source host initiating connections to many destination ports
+
+- Very short connection durations
+
+- Low byte counts per connection
+
+- Predominantly failed or reset connections
+
+This behavior strongly aligns with TCP SYN-based scanning.
+
+### 4.2 One-to-Many Port Pattern
+
+Aggregated connection analysis demonstrated that 192.168.94.136 attempted connections to numerous distinct TCP ports on the target host within a short time window.
+
+This pattern is a primary indicator of horizontal port scanning and is unlikely to occur during normal application behavior.
+
+### 4.3 Service Probing Artifacts
+
+Additional protocol logs (dns.log, http.log, ssl.log, x509.log) were generated during the scan. These artifacts are consistent with service/version probing behavior, where scanning tools briefly initiate protocol-specific handshakes to identify running services.
+
+The presence of these logs supports reconnaissance activity but does not imply successful exploitation.
+
+## 5.0 Assessment
+
+Likelihood of Malicious Activity: Medium
+
+The activity was assessed as active reconnaissance based on:
+
+- One-to-many TCP connection pattern
+
+- Short-lived connections with minimal payloads
+
+- Correlation with known scanning techniques
+
+No evidence of exploitation, privilege escalation, or lateral movement was observed.
+
+## 6.0 Recommended Actions
+### Immediate Actions
+
+- Identify the source host responsible for the scanning activity
+
+- Confirm whether the activity was authorized (e.g., internal testing)
+
+### Preventive / Monitoring Actions
+
+- Implement detection for horizontal port scanning patterns
+
+- Alert on sustained one-to-many TCP connections
+
+- Correlate with endpoint telemetry for process attribution
+
+## 7.0 Lessons Learned
+
+- Connection metadata is sufficient to identify port scanning activity
+
+- Service identification is secondary to behavioral patterns
+
+- Background traffic and protocol noise should be filtered during analysis
+
+- Accurate classification prevents unnecessary escalation
+
+### Why This Incident Matters
+
+This investigation demonstrates the ability to detect and classify reconnaissance activity using passive network telemetry. Identifying port scanning at this stage enables defenders to respond before exploitation attempts occur.
